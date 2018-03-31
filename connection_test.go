@@ -1,3 +1,5 @@
+// +build integration
+
 package gohive
 
 import "testing"
@@ -12,7 +14,7 @@ func TestShowTables(t *testing.T) {
 		ct        int = 0
 		tableName string
 	)
-	conn, err := Connect("localhost:10000", DefaultOptions)
+	conn, err := Connect("114.215.255.134:10000", DefaultOptions)
 	if err != nil {
 		t.Fatalf("Connect error %v", err)
 	}

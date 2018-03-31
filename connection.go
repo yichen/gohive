@@ -5,9 +5,11 @@ package gohive
 import (
 	"errors"
 	"fmt"
+
+	inf "github.com/dazheng/gohive/inf"
+
 	"context"
 
-	"github.com/yichen/gohive/tcliservice"
 	"git.apache.org/thrift.git/lib/go/thrift"
 )
 
@@ -22,42 +24,39 @@ var (
 )
 
 type Connection struct {
-	thrift  *tcliservice.TCLIServiceClient
-	session *tcliservice.TSessionHandle
+	thrift  *inf.TCLIServiceClient
+	session *inf.TSessionHandle
 	options Options
 }
 
 func Connect(host string, options Options) (*Connection, error) {
-	socket, err := thrift.NewTSocket(host)
-
+	transport, err := thrift.NewTSocket(host)
 	if err != nil {
+		fmt.Printf("failed at NewTSocket")
 		return nil, err
 	}
 
-	if err := socket.Open(); err != nil {
+	if err := transport.Open(); err != nil {
+		fmt.Printf("failed at Open()")
 		return nil, err
 	}
 
-	if socket == nil {
-		return nil, errors.New("nil thrift socket")
+	if transport == nil {
+		return nil, errors.New("nil thrift transport")
 	}
-
-	trans := thrift.NewTBufferedTransport(socket, 1024)
 
 	/*
 		NB: hive 0.13's default is a TSaslProtocol, but
 		there isn't a golang implementation in apache thrift as
 		of this writing.
 	*/
-	protocol := thrift.NewTBinaryProtocol(trans, false, false)
-	client := tcliservice.NewTCLIServiceClientProtocol(trans, protocol, protocol)
-	trans.Open()
-	defer trans.Close()
-
-	s := tcliservice.NewTOpenSessionReq()
+	protocol := thrift.NewTBinaryProtocolFactoryDefault()
+	client := inf.NewTCLIServiceClientFactory(transport, protocol)
+	s := inf.NewTOpenSessionReq()
 	s.ClientProtocol = 6
 	session, err := client.OpenSession(context.Background(), s)
 	if err != nil {
+		fmt.Println("failed at opensession")
 		return nil, err
 	}
 
@@ -72,11 +71,11 @@ func (c *Connection) isOpen() bool {
 // connection is invalid for other use.
 func (c *Connection) Close() error {
 	if c.isOpen() {
-		closeReq := tcliservice.NewTCloseSessionReq()
+		closeReq := inf.NewTCloseSessionReq()
 		closeReq.SessionHandle = c.session
 		resp, err := c.thrift.CloseSession(context.Background(), closeReq)
 		if err != nil {
-			return fmt.Errorf("Error closing session: %v, %v", resp, err)
+			return fmt.Errorf("Error closing session: ", resp, err)
 		}
 
 		c.session = nil
@@ -88,7 +87,7 @@ func (c *Connection) Close() error {
 // Issue a query on an open connection, returning a RowSet, which
 // can be later used to query the operation's status.
 func (c *Connection) Query(query string) (RowSet, error) {
-	executeReq := tcliservice.NewTExecuteStatementReq()
+	executeReq := inf.NewTExecuteStatementReq()
 	executeReq.SessionHandle = c.session
 	executeReq.Statement = query
 
@@ -104,8 +103,8 @@ func (c *Connection) Query(query string) (RowSet, error) {
 	return newRowSet(c.thrift, resp.OperationHandle, c.options), nil
 }
 
-func (c *Connection) Exec(query string) (*tcliservice.TExecuteStatementResp, error) {
-	executeReq := tcliservice.NewTExecuteStatementReq()
+func (c *Connection) Exec(query string) (*inf.TExecuteStatementResp, error) {
+	executeReq := inf.NewTExecuteStatementReq()
 	executeReq.SessionHandle = c.session
 	executeReq.Statement = query
 
@@ -121,7 +120,7 @@ func (c *Connection) Exec(query string) (*tcliservice.TExecuteStatementResp, err
 	return resp, err
 }
 
-func isSuccessStatus(p *tcliservice.TStatus) bool {
+func isSuccessStatus(p *inf.TStatus) bool {
 	status := p.GetStatusCode()
-	return status == tcliservice.TStatusCode_SUCCESS_STATUS || status == tcliservice.TStatusCode_SUCCESS_WITH_INFO_STATUS
+	return status == inf.TStatusCode_SUCCESS_STATUS || status == inf.TStatusCode_SUCCESS_WITH_INFO_STATUS
 }

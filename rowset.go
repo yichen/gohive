@@ -8,20 +8,21 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/yichen/gohive/tcliservice"
+	inf "github.com/dazheng/gohive/inf"
+
 	"git.apache.org/thrift.git/lib/go/thrift"
 )
 
 type rowSet struct {
-	thrift    *tcliservice.TCLIServiceClient
-	operation *tcliservice.TOperationHandle
+	thrift    *inf.TCLIServiceClient
+	operation *inf.TOperationHandle
 	options   Options
 
-	columns    []*tcliservice.TColumnDesc
+	columns    []*inf.TColumnDesc
 	columnStrs []string
 
 	offset    int
-	rowSet    *tcliservice.TRowSet
+	rowSet    *inf.TRowSet
 	hasMore   bool
 	ready     bool
 	resultSet [][]interface{}
@@ -44,18 +45,18 @@ type RowSet interface {
 // Represents job status, including success state and time the
 // status was updated.
 type Status struct {
-	state *tcliservice.TOperationState
+	state *inf.TOperationState
 	Error error
 	At    time.Time
 }
 
-func newRowSet(thrift *tcliservice.TCLIServiceClient, operation *tcliservice.TOperationHandle, options Options) RowSet {
+func newRowSet(thrift *inf.TCLIServiceClient, operation *inf.TOperationHandle, options Options) RowSet {
 	return &rowSet{thrift, operation, options, nil, nil, 0, nil, true, false, nil, nil}
 }
 
 // Issue a thrift call to check for the job's current status.
 func (r *rowSet) Poll() (*Status, error) {
-	req := tcliservice.NewTGetOperationStatusReq()
+	req := inf.NewTGetOperationStatusReq()
 	req.OperationHandle = r.operation
 
 	resp, err := r.thrift.GetOperationStatus(context.Background(), req)
@@ -86,7 +87,7 @@ func (r *rowSet) Wait() (*Status, error) {
 		if status.IsComplete() {
 			if status.IsSuccess() {
 				// Fetch operation metadata.
-				metadataReq := tcliservice.NewTGetResultSetMetadataReq()
+				metadataReq := inf.NewTGetResultSetMetadataReq()
 				metadataReq.OperationHandle = r.operation
 
 				metadataResp, err := r.thrift.GetResultSetMetadata(context.Background(), metadataReq)
@@ -129,9 +130,9 @@ func (r *rowSet) fetchAll() bool {
 		return false
 	}
 
-	fetchReq := tcliservice.NewTFetchResultsReq()
+	fetchReq := inf.NewTFetchResultsReq()
 	fetchReq.OperationHandle = r.operation
-	fetchReq.Orientation = tcliservice.TFetchOrientation_FETCH_NEXT
+	fetchReq.Orientation = inf.TFetchOrientation_FETCH_NEXT
 	fetchReq.MaxRows = r.options.BatchSize
 
 	resp, err := r.thrift.FetchResults(context.Background(), fetchReq)
@@ -276,7 +277,7 @@ func (r *rowSet) Handle() ([]byte, error) {
 	return serializeOp(r.operation)
 }
 
-func convertColumn(col *tcliservice.TColumn) (colValues interface{}, length int) {
+func convertColumn(col *inf.TColumn) (colValues interface{}, length int) {
 	switch {
 	case col.IsSetStringVal():
 		return col.GetStringVal().GetValues(), len(col.GetStringVal().GetValues())
@@ -312,10 +313,10 @@ func (s Status) IsComplete() bool {
 	}
 
 	switch *s.state {
-	case tcliservice.TOperationState_FINISHED_STATE,
-		tcliservice.TOperationState_CANCELED_STATE,
-		tcliservice.TOperationState_CLOSED_STATE,
-		tcliservice.TOperationState_ERROR_STATE:
+	case inf.TOperationState_FINISHED_STATE,
+		inf.TOperationState_CANCELED_STATE,
+		inf.TOperationState_CLOSED_STATE,
+		inf.TOperationState_ERROR_STATE:
 		return true
 	}
 
@@ -328,12 +329,12 @@ func (s Status) IsSuccess() bool {
 		return false
 	}
 
-	return *s.state == tcliservice.TOperationState_FINISHED_STATE
+	return *s.state == inf.TOperationState_FINISHED_STATE
 }
 
-func deserializeOp(handle []byte) (*tcliservice.TOperationHandle, error) {
+func deserializeOp(handle []byte) (*inf.TOperationHandle, error) {
 	ser := thrift.NewTDeserializer()
-	var val tcliservice.TOperationHandle
+	var val inf.TOperationHandle
 
 	if err := ser.Read(&val, handle); err != nil {
 		return nil, err
@@ -342,7 +343,8 @@ func deserializeOp(handle []byte) (*tcliservice.TOperationHandle, error) {
 	return &val, nil
 }
 
-func serializeOp(operation *tcliservice.TOperationHandle) ([]byte, error) {
+func serializeOp(operation *inf.TOperationHandle) ([]byte, error) {
 	ser := thrift.NewTSerializer()
+	fmt.Println("serializeOp")
 	return ser.Write(context.Background(), operation)
 }
